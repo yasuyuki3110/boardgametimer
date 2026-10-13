@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ボードゲームタイマー</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        darkBg: '#0F172A',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            background-color: #0F172A;
+            color: #F8FAFC;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .page {
+            transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+        }
+        .page-hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.97);
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .btn-active-pop {
+            transition: transform 0.08s ease, box-shadow 0.08s ease;
+        }
+        .btn-active-pop:active {
+            transform: scale(0.96) !important;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 3px;
+        }
+
+        .timer-ring-circle {
+            transition: stroke-dashoffset 0.25s linear, stroke 0.3s ease;
+        }
+
+        @keyframes alertFlash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .animate-alert-flash {
+            animation: alertFlash 0.5s ease-in-out 2;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden font-sans antialiased bg-slate-900 text-slate-100 flex flex-col justify-between select-none">
+
+    <!-- ================= PAGE 1: SETTINGS SCREEN ================= -->
+    <div id="page-settings" class="page w-full h-full flex flex-col justify-between max-w-2xl mx-auto p-4 md:p-6 overflow-y-auto">
+        <!-- Header -->
+        <header class="text-center my-2">
+            <h1 class="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-500">
+                <i class="fa-solid fa-hourglass-half mr-2 text-cyan-400"></i>ボードゲームタイマー
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">ルールとプレイヤー（最大6名）を設定してスタート</p>
+        </header>
+
+        <main class="space-y-4 my-auto py-2">
+            <!-- 1. TIME LIMIT SETTING -->
+            <section class="glass-panel rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-stopwatch text-indigo-400"></i>1ターンの持ち時間
+                    </h2>
+                    <span id="selected-time-label" class="text-xs font-bold px-2.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+                        60秒
+                    </span>
+                </div>
+
+                <!-- Time Presets Grid (30s, 60s, 90s, 120s, 150s, 300s) -->
+                <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+                    <button type="button" data-seconds="30" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all">30s</button>
+                    <button type="button" data-seconds="60" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-indigo-600 border border-indigo-400 text-white shadow-lg shadow-indigo-500/30 transition-all">60s</button>
+                    <button type="button" data-seconds="90" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all">90s</button>
+                    <button type="button" data-seconds="120" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all">120s</button>
+                    <button type="button" data-seconds="150" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all">150s</button>
+                    <button type="button" data-seconds="300" class="time-preset-btn py-2.5 rounded-xl font-bold text-sm bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all">300s</button>
+                </div>
+
+                <!-- Custom Time Input -->
+                <div class="flex items-center gap-2 pt-2 border-t border-slate-800">
+                    <span class="text-xs text-slate-400">カスタム時間(秒):</span>
+                    <input type="number" id="custom-time-input" min="5" max="3600" placeholder="例: 45" 
+                        class="bg-slate-900 border border-slate-700 text-slate-100 text-sm rounded-lg px-3 py-1.5 w-24 focus:outline-none focus:border-indigo-500 text-center font-bold">
+                    <button type="button" id="btn-apply-custom-time" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                        設定
+                    </button>
+                </div>
+            </section>
+
+            <!-- 2. PLAYER CONFIGURATION (2~6 Players) -->
+            <section class="glass-panel rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-users text-purple-400"></i>プレイヤー設定 (2〜6人)
+                    </h2>
+                    <span id="player-count-badge" class="text-xs font-bold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-2 py-0.5 rounded-md">
+                        4 名
+                    </span>
+                </div>
+
+                <!-- Player Count Selection Buttons -->
+                <div class="flex items-center gap-1.5 mb-3">
+                    <span class="text-xs text-slate-400 mr-1">人数:</span>
+                    <button type="button" data-count="2" class="player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300 transition">2人</button>
+                    <button type="button" data-count="3" class="player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300 transition">3人</button>
+                    <button type="button" data-count="4" class="player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 border border-indigo-400 text-white shadow transition">4人</button>
+                    <button type="button" data-count="5" class="player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300 transition">5人</button>
+                    <button type="button" data-count="6" class="player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300 transition">6人</button>
+                </div>
+
+                <!-- Dynamic Player Name & Color List -->
+                <div id="player-list-container" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    <!-- Populated dynamically -->
+                </div>
+            </section>
+
+            <!-- 3. SOUND SETTINGS -->
+            <section class="glass-panel rounded-2xl p-4 shadow-xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div id="sound-icon-bg" class="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        <i class="fa-solid fa-volume-high text-base"></i>
+                    </div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200">効果音 & バイブ通知</div>
+                        <div class="text-xs text-slate-400">持ち時間の半分、残り1分、30秒、10秒〜毎秒警告</div>
+                    </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="sound-toggle" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+            </section>
+        </main>
+
+        <!-- START GAME BUTTON -->
+        <footer class="pt-2 pb-2">
+            <button type="button" id="btn-start-game" class="btn-active-pop w-full py-4 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xl rounded-2xl shadow-xl shadow-teal-500/20 tracking-wider flex items-center justify-center gap-3 transition">
+                <i class="fa-solid fa-play text-2xl"></i> ゲームスタート
+            </button>
+        </footer>
+    </div>
+
+
+    <!-- ================= PAGE 2: MAIN TIMER SCREEN ================= -->
+    <div id="page-timer" class="page page-hidden w-full h-full flex flex-col justify-between p-3 md:p-6 select-none">
+        
+        <!-- TOP CONTROL BAR -->
+        <header class="flex items-center justify-between z-10">
+            <!-- Back to Settings Button -->
+            <button type="button" id="btn-back-settings" class="px-3.5 py-2 bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-gear"></i> 設定
+            </button>
+
+            <!-- Round Display Header -->
+            <div class="flex items-center gap-2">
+                <div id="round-badge" class="px-4 py-1.5 bg-indigo-950/90 text-indigo-300 border border-indigo-500/40 rounded-full font-extrabold text-xs tracking-wide shadow-md flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate text-indigo-400"></i>
+                    <span>ラウンド</span>
+                    <span id="current-round-num" class="text-base font-black text-white ml-0.5">1</span>
+                </div>
+            </div>
+
+            <!-- Mute / Unmute Quick Toggle & Pause -->
+            <div class="flex items-center gap-2">
+                <button type="button" id="btn-quick-mute" class="w-9 h-9 bg-slate-800/80 hover:bg-slate-700 text-indigo-300 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center justify-center shadow-md">
+                    <i id="quick-mute-icon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button type="button" id="btn-toggle-pause" class="px-3.5 py-2 bg-slate-800/80 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-md">
+                    <i id="pause-icon" class="fa-solid fa-pause"></i> <span id="pause-text">一時停止</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN INTERACTIVE GIANT NEXT TURN BUTTON -->
+        <main class="flex-1 my-2 flex flex-col items-center justify-center relative">
+            
+            <button type="button" id="btn-next-turn" class="btn-active-pop w-full h-full max-w-lg max-h-[640px] rounded-3xl glass-panel relative flex flex-col items-center justify-between p-6 md:p-8 transition-all duration-300 focus:outline-none border-2 shadow-2xl overflow-hidden group cursor-pointer" style="border-color: rgba(99, 102, 241, 0.4);">
+                
+                <!-- Background Ambient Glow synced with Player Color -->
+                <div id="player-glow" class="absolute inset-0 opacity-25 transition-all duration-500 pointer-events-none rounded-3xl" style="background: radial-gradient(circle at center, #6366f1 0%, transparent 70%);"></div>
+
+                <!-- Active Player Banner (Clean Name Display) -->
+                <div class="z-10 w-full flex flex-col items-center pt-1">
+                    <span class="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">現在のターン</span>
+                    <div id="player-badge-active" class="px-6 py-2.5 rounded-2xl flex items-center gap-3 transition-all duration-300 shadow-lg border border-white/20">
+                        <div id="player-initial-badge" class="w-8 h-8 rounded-full bg-indigo-500 text-white font-black text-sm flex items-center justify-center shadow border border-white/40">
+                            P1
+                        </div>
+                        <span id="player-name-display" class="font-black text-xl md:text-3xl text-white tracking-wide">
+                            プレイヤー 1
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Central Circular Timer & Digital Countdown -->
+                <div class="z-10 relative flex items-center justify-center my-auto py-2">
+                    <!-- SVG Circular Progress Bar -->
+                    <svg class="w-56 h-56 sm:w-80 sm:h-80 transform -rotate-90" viewBox="0 0 120 120">
+                        <!-- Background Circle -->
+                        <circle cx="60" cy="60" r="52" stroke="currentColor" stroke-width="8" class="text-slate-800/80" fill="transparent" />
+                        <!-- Progress Circle -->
+                        <circle id="timer-ring" cx="60" cy="60" r="52" stroke="#6366f1" stroke-width="8" stroke-linecap="round" class="timer-ring-circle" fill="transparent" stroke-dasharray="326.72" stroke-dashoffset="0" />
+                    </svg>
+
+                    <!-- Digital Clock Display Inside Circle -->
+                    <div class="absolute flex flex-col items-center justify-center text-center">
+                        <span id="clock-display" class="font-black text-5xl sm:text-7xl tracking-tighter text-white font-mono drop-shadow-md">
+                            01:00
+                        </span>
+                        
+                        <!-- Notification / Status Banner -->
+                        <span id="status-toast" class="hidden mt-2 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-extrabold rounded-lg shadow">
+                            一時停止中
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Bottom Tap Prompt Button Area -->
+                <div class="z-10 w-full flex flex-col items-center pb-1">
+                    <div id="tap-prompt" class="w-full py-4 bg-indigo-600/90 group-hover:bg-indigo-500 text-white font-black text-xl md:text-2xl rounded-2xl shadow-xl border border-indigo-400/40 tracking-wider flex items-center justify-center gap-3 transition-all">
+                        <span>NEXT TURN （次へ）</span>
+                        <i class="fa-solid fa-forward text-2xl"></i>
+                    </div>
+                    <span class="text-[11px] font-medium text-slate-400 mt-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-hand-pointer text-slate-400"></i> タップでタイマーリセット＆交代
+                    </span>
+                </div>
+            </button>
+
+        </main>
+
+        <!-- BOTTOM CONTROL BAR -->
+        <footer class="flex items-center justify-center z-10 pt-1">
+            <button type="button" id="btn-reset-turn" class="px-5 py-2.5 bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 transition flex items-center gap-2 shadow-md">
+                <i class="fa-solid fa-rotate-left text-indigo-400"></i> ターンをやり直す
+            </button>
+        </footer>
+
+    </div>
+
+    <script>
+        /* ===================================================================
+           STATE MANAGEMENT
+           =================================================================== */
+        const PRESET_COLORS = [
+            { hex: '#3B82F6', label: 'ブルー' },
+            { hex: '#EF4444', label: 'レッド' },
+            { hex: '#10B981', label: 'グリーン' },
+            { hex: '#F59E0B', label: 'イエロー' },
+            { hex: '#8B5CF6', label: 'パープル' },
+            { hex: '#EC4899', label: 'ピンク' }
+        ];
+
+        let state = {
+            timeLimit: 60,            // Duration per turn in seconds
+            soundEnabled: true,       // Sound & Vibration toggle
+            players: [
+                { id: 1, name: 'プレイヤー1', color: PRESET_COLORS[0].hex },
+                { id: 2, name: 'プレイヤー2', color: PRESET_COLORS[1].hex },
+                { id: 3, name: 'プレイヤー3', color: PRESET_COLORS[2].hex },
+                { id: 4, name: 'プレイヤー4', color: PRESET_COLORS[3].hex }
+            ],
+            activePlayerIndex: 0,
+            roundNumber: 1,           // Increments every full circle through players
+            timeRemaining: 60,
+            isRunning: false,
+            timerInterval: null,
+            // Track triggered alerts in current turn to prevent duplicate sounds
+            alertFlags: {
+                halfTimeTriggered: false,
+                oneMinuteTriggered: false,
+                thirtySecTriggered: false
+            }
+        };
+
+        const CIRCLE_RADIUS = 52;
+        const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS; // ~326.72
+
+        /* ===================================================================
+           AUDIO & VIBRATION SYNTHESIZER
+           =================================================================== */
+        let audioCtx = null;
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function triggerVibration(pattern) {
+            if (state.soundEnabled && 'vibrate' in navigator) {
+                try {
+                    navigator.vibrate(pattern);
+                } catch (e) { console.error(e); }
+            }
+        }
+
+        // Tap/Turn Transition Sound
+        function playTapSound() {
+            if (!state.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start();
+                osc.stop(ctx.currentTime + 0.08);
+
+                triggerVibration(30);
+            } catch (e) { console.error(e); }
+        }
+
+        // Mid-turn Alert Chime (for Half-time, 1 min, 30 sec)
+        function playAlertTone(type) {
+            if (!state.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                let freq = 660; // Default E5
+                if (type === 'half') freq = 587.33; // D5
+                if (type === '60s') freq = 659.25;  // E5
+                if (type === '30s') freq = 783.99;  // G5
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.2, now + 0.15);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.25);
+
+                triggerVibration([60, 40, 60]);
+            } catch (e) { console.error(e); }
+        }
+
+        // Countdown Beep for <= 10 Seconds (Every second)
+        function playEverySecondBeep(secsLeft) {
+            if (!state.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                // Escalating frequency as time gets closer to 0
+                const freq = secsLeft <= 3 ? 987.77 : 783.99; // B5 or G5
+                osc.type = secsLeft <= 3 ? 'sawtooth' : 'sine';
+                osc.frequency.setValueAtTime(freq, now);
+
+                gain.gain.setValueAtTime(secsLeft <= 3 ? 0.3 : 0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.09);
+
+                triggerVibration(secsLeft <= 3 ? [50, 20, 50] : 30);
+            } catch (e) { console.error(e); }
+        }
+
+        // Time Over Buzzer
+        function playTimesUpSound() {
+            if (!state.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                
+                const now = ctx.currentTime;
+                [440, 440, 880].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                    
+                    gain.gain.setValueAtTime(0.3, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.22);
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.22);
+                });
+
+                triggerVibration([150, 50, 150, 50, 250]);
+            } catch (e) { console.error(e); }
+        }
+
+        /* ===================================================================
+           DOM ELEMENTS
+           =================================================================== */
+        const pageSettings = document.getElementById('page-settings');
+        const pageTimer = document.getElementById('page-timer');
+
+        const selectedTimeLabel = document.getElementById('selected-time-label');
+        const customTimeInput = document.getElementById('custom-time-input');
+        const btnApplyCustomTime = document.getElementById('btn-apply-custom-time');
+        const playerListContainer = document.getElementById('player-list-container');
+        const playerCountBadge = document.getElementById('player-count-badge');
+        const soundToggle = document.getElementById('sound-toggle');
+        const btnStartGame = document.getElementById('btn-start-game');
+
+        const btnBackSettings = document.getElementById('btn-back-settings');
+        const btnQuickMute = document.getElementById('btn-quick-mute');
+        const quickMuteIcon = document.getElementById('quick-mute-icon');
+        const btnTogglePause = document.getElementById('btn-toggle-pause');
+        const pauseIcon = document.getElementById('pause-icon');
+        const pauseText = document.getElementById('pause-text');
+        const statusToast = document.getElementById('status-toast');
+        const btnResetTurn = document.getElementById('btn-reset-turn');
+        const btnNextTurn = document.getElementById('btn-next-turn');
+
+        const currentRoundNum = document.getElementById('current-round-num');
+        const playerBadgeActive = document.getElementById('player-badge-active');
+        const playerInitialBadge = document.getElementById('player-initial-badge');
+        const playerNameDisplay = document.getElementById('player-name-display');
+        const playerGlow = document.getElementById('player-glow');
+        const timerRing = document.getElementById('timer-ring');
+        const clockDisplay = document.getElementById('clock-display');
+        const tapPrompt = document.getElementById('tap-prompt');
+
+        /* ===================================================================
+           SETTINGS LOGIC & RENDERING
+           =================================================================== */
+        function getInitial(name) {
+            if (!name) return 'P';
+            return name.trim().charAt(0).toUpperCase();
+        }
+
+        function setPlayerCount(count) {
+            count = Math.max(2, Math.min(6, count));
+            
+            if (state.players.length < count) {
+                for (let i = state.players.length; i < count; i++) {
+                    const colorIdx = i % PRESET_COLORS.length;
+                    state.players.push({
+                        id: Date.now() + i,
+                        name: `プレイヤー${i + 1}`,
+                        color: PRESET_COLORS[colorIdx].hex
+                    });
+                }
+            } else if (state.players.length > count) {
+                state.players = state.players.slice(0, count);
+            }
+
+            document.querySelectorAll('.player-count-btn').forEach(btn => {
+                const c = parseInt(btn.getAttribute('data-count'), 10);
+                if (c === count) {
+                    btn.className = 'player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 border border-indigo-400 text-white shadow transition';
+                } else {
+                    btn.className = 'player-count-btn flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-800 border border-slate-700 text-slate-300 transition';
+                }
+            });
+
+            renderPlayerList();
+        }
+
+        function renderPlayerList() {
+            playerListContainer.innerHTML = '';
+            state.players.forEach((player, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 bg-slate-900/80 p-2 rounded-xl border border-slate-800';
+
+                const colorBtn = document.createElement('div');
+                colorBtn.className = 'w-7 h-7 rounded-lg cursor-pointer flex-shrink-0 border-2 border-white/20 transition hover:scale-105 flex items-center justify-center font-black text-[10px] text-white shadow';
+                colorBtn.style.backgroundColor = player.color;
+                colorBtn.textContent = getInitial(player.name);
+                colorBtn.title = 'カラー変更';
+                colorBtn.addEventListener('click', () => {
+                    const currentIdx = PRESET_COLORS.findIndex(c => c.hex.toLowerCase() === player.color.toLowerCase());
+                    const nextIdx = (currentIdx + 1) % PRESET_COLORS.length;
+                    player.color = PRESET_COLORS[nextIdx].hex;
+                    renderPlayerList();
+                });
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.value = player.name;
+                nameInput.maxLength = 15;
+                nameInput.className = 'bg-slate-800 border border-slate-700 text-slate-100 text-xs font-semibold rounded-lg px-3 py-1.5 flex-1 focus:outline-none focus:border-indigo-500';
+                nameInput.addEventListener('input', (e) => {
+                    player.name = e.target.value.trim() || `プレイヤー${index + 1}`;
+                    colorBtn.textContent = getInitial(player.name);
+                });
+
+                row.appendChild(colorBtn);
+                row.appendChild(nameInput);
+                playerListContainer.appendChild(row);
+            });
+
+            playerCountBadge.textContent = `${state.players.length} 名`;
+        }
+
+        document.querySelectorAll('.player-count-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const count = parseInt(btn.getAttribute('data-count'), 10);
+                setPlayerCount(count);
+            });
+        });
+
+        document.querySelectorAll('.time-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const secs = parseInt(btn.getAttribute('data-seconds'), 10);
+                setTimeLimit(secs);
+                
+                document.querySelectorAll('.time-preset-btn').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'border-indigo-400', 'text-white', 'shadow-lg', 'shadow-indigo-500/30');
+                    b.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+                });
+                btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+                btn.classList.add('bg-indigo-600', 'border-indigo-400', 'text-white', 'shadow-lg', 'shadow-indigo-500/30');
+            });
+        });
+
+        function applyCustomTime() {
+            const val = parseInt(customTimeInput.value, 10);
+            if (val && val >= 5 && val <= 3600) {
+                setTimeLimit(val);
+                document.querySelectorAll('.time-preset-btn').forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'border-indigo-400', 'text-white', 'shadow-lg', 'shadow-indigo-500/30');
+                    b.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+                });
+            }
+        }
+        btnApplyCustomTime.addEventListener('click', applyCustomTime);
+
+        function setTimeLimit(seconds) {
+            state.timeLimit = seconds;
+            selectedTimeLabel.textContent = `${seconds}秒`;
+        }
+
+        soundToggle.addEventListener('change', (e) => {
+            state.soundEnabled = e.target.checked;
+            updateMuteIcon();
+        });
+
+        function updateMuteIcon() {
+            if (state.soundEnabled) {
+                quickMuteIcon.className = 'fa-solid fa-volume-high';
+                btnQuickMute.classList.remove('text-slate-500');
+                btnQuickMute.classList.add('text-indigo-300');
+            } else {
+                quickMuteIcon.className = 'fa-solid fa-volume-xmark';
+                btnQuickMute.classList.remove('text-indigo-300');
+                btnQuickMute.classList.add('text-slate-500');
+            }
+            soundToggle.checked = state.soundEnabled;
+        }
+
+        btnQuickMute.addEventListener('click', (e) => {
+            e.stopPropagation();
+            state.soundEnabled = !state.soundEnabled;
+            updateMuteIcon();
+        });
+
+        // Start Game Action
+        btnStartGame.addEventListener('click', () => {
+            getAudioContext();
+            
+            state.players.forEach((p, i) => {
+                if (!p.name || p.name.trim() === '') {
+                    p.name = `プレイヤー${i + 1}`;
+                }
+            });
+
+            state.activePlayerIndex = 0;
+            state.roundNumber = 1;
+            
+            pageSettings.classList.add('page-hidden');
+            pageTimer.classList.remove('page-hidden');
+
+            startTurn();
+        });
+
+        /* ===================================================================
+           TIMER ENGINE & STRICT ALERT TIMINGS
+           =================================================================== */
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function showStatusToast(message, colorClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40') {
+            statusToast.textContent = message;
+            statusToast.className = `mt-2 px-3 py-1 text-xs font-extrabold rounded-lg shadow border animate-bounce ${colorClass}`;
+            statusToast.classList.remove('hidden');
+        }
+
+        function hideStatusToast() {
+            statusToast.classList.add('hidden');
+        }
+
+        function updateDisplay() {
+            clockDisplay.textContent = formatTime(state.timeRemaining);
+            
+            const fraction = state.timeRemaining / state.timeLimit;
+            const offset = CIRCLE_CIRCUMFERENCE * (1 - fraction);
+            timerRing.style.strokeDashoffset = offset;
+
+            const activePlayer = state.players[state.activePlayerIndex];
+            
+            if (state.timeRemaining <= 10 && state.timeRemaining > 0) {
+                timerRing.setAttribute('stroke', '#EF4444');
+                clockDisplay.classList.add('text-red-400');
+            } else {
+                timerRing.setAttribute('stroke', activePlayer ? activePlayer.color : '#6366f1');
+                clockDisplay.classList.remove('text-red-400');
+            }
+        }
+
+        function updateActivePlayerUI() {
+            const player = state.players[state.activePlayerIndex];
+            if (!player) return;
+
+            playerNameDisplay.textContent = player.name;
+            playerInitialBadge.textContent = getInitial(player.name);
+            playerInitialBadge.style.backgroundColor = player.color;
+
+            playerBadgeActive.style.backgroundColor = `${player.color}25`;
+            playerBadgeActive.style.borderColor = `${player.color}60`;
+
+            playerGlow.style.background = `radial-gradient(circle at center, ${player.color} 0%, transparent 70%)`;
+            tapPrompt.style.backgroundColor = player.color;
+            btnNextTurn.style.borderColor = `${player.color}60`;
+
+            currentRoundNum.textContent = state.roundNumber;
+        }
+
+        /* 
+           ALERT RULES IMPLEMENTATION:
+           - Half Time (持ち時間の半分)
+           - 60 Seconds Remaining (残り1分) [If original limit > 60s]
+           - 30 Seconds Remaining (残り30秒) [If original limit > 30s]
+           - 10 down to 0 seconds (10秒から毎秒)
+        */
+        function checkAndTriggerAlerts(secs) {
+            const halfTime = Math.floor(state.timeLimit / 2);
+
+            // 1. Half Time Alert
+            if (secs === halfTime && halfTime > 10 && !state.alertFlags.halfTimeTriggered) {
+                state.alertFlags.halfTimeTriggered = true;
+                playAlertTone('half');
+                showStatusToast('持ち時間の半分経過！', 'bg-sky-500/20 text-sky-300 border-sky-500/40');
+                setTimeout(hideStatusToast, 1800);
+            }
+
+            // 2. 60 Seconds Remaining
+            if (secs === 60 && state.timeLimit > 60 && !state.alertFlags.oneMinuteTriggered) {
+                state.alertFlags.oneMinuteTriggered = true;
+                playAlertTone('60s');
+                showStatusToast('残り 1 分！', 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40');
+                setTimeout(hideStatusToast, 1800);
+            }
+
+            // 3. 30 Seconds Remaining
+            if (secs === 30 && state.timeLimit > 30 && !state.alertFlags.thirtySecTriggered) {
+                state.alertFlags.thirtySecTriggered = true;
+                playAlertTone('30s');
+                showStatusToast('残り 30 秒！', 'bg-amber-500/20 text-amber-300 border-amber-500/40');
+                setTimeout(hideStatusToast, 1800);
+            }
+
+            // 4. Every Second Countdown (<= 10s)
+            if (secs <= 10 && secs > 0) {
+                playEverySecondBeep(secs);
+                showStatusToast(`残り ${secs} 秒！`, 'bg-red-500/20 text-red-400 border-red-500/40');
+            }
+        }
+
+        function startTurn() {
+            clearInterval(state.timerInterval);
+            
+            state.timeRemaining = state.timeLimit;
+            state.isRunning = true;
+            state.alertFlags = {
+                halfTimeTriggered: false,
+                oneMinuteTriggered: false,
+                thirtySecTriggered: false
+            };
+
+            updateActivePlayerUI();
+            updateDisplay();
+            setPauseUI(false);
+            hideStatusToast();
+
+            state.timerInterval = setInterval(() => {
+                if (!state.isRunning) return;
+
+                state.timeRemaining--;
+
+                // Check strict alert triggers
+                checkAndTriggerAlerts(state.timeRemaining);
+
+                if (state.timeRemaining <= 0) {
+                    state.timeRemaining = 0;
+                    updateDisplay();
+                    clearInterval(state.timerInterval);
+                    playTimesUpSound();
+                    showStatusToast('時間切れ！', 'bg-red-600/30 text-red-300 border-red-500/60');
+                    flashTimesUpEffect();
+                    return;
+                }
+
+                updateDisplay();
+            }, 1000);
+        }
+
+        function flashTimesUpEffect() {
+            btnNextTurn.classList.add('border-red-500', 'animate-pulse');
+            setTimeout(() => {
+                btnNextTurn.classList.remove('border-red-500', 'animate-pulse');
+            }, 2500);
+        }
+
+        function advanceToNextTurn() {
+            playTapSound();
+            
+            const totalPlayers = state.players.length;
+            const nextIndex = (state.activePlayerIndex + 1) % totalPlayers;
+
+            // Increment round number when completing 1 full cycle
+            if (nextIndex === 0) {
+                state.roundNumber++;
+            }
+
+            state.activePlayerIndex = nextIndex;
+            startTurn();
+        }
+
+        function togglePause() {
+            state.isRunning = !state.isRunning;
+            setPauseUI(!state.isRunning);
+        }
+
+        function setPauseUI(isPaused) {
+            if (isPaused) {
+                pauseIcon.className = 'fa-solid fa-play';
+                pauseText.textContent = '再開';
+                showStatusToast('一時停止中', 'bg-amber-500/20 text-amber-300 border-amber-500/40');
+            } else {
+                pauseIcon.className = 'fa-solid fa-pause';
+                pauseText.textContent = '一時停止';
+                hideStatusToast();
+            }
+        }
+
+        /* ===================================================================
+           EVENT LISTENERS (MAIN SCREEN)
+           =================================================================== */
+        // Next Turn (Giant Center Area Tap)
+        btnNextTurn.addEventListener('click', (e) => {
+            e.preventDefault();
+            advanceToNextTurn();
+        });
+
+        btnTogglePause.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePause();
+        });
+
+        btnResetTurn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            playTapSound();
+            startTurn();
+        });
+
+        btnBackSettings.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearInterval(state.timerInterval);
+            state.isRunning = false;
+            
+            pageTimer.classList.add('page-hidden');
+            pageSettings.classList.remove('page-hidden');
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            timerRing.style.strokeDasharray = `${CIRCLE_CIRCUMFERENCE}`;
+            timerRing.style.strokeDashoffset = `0`;
+            setPlayerCount(4);
+        });
+    </script>
+</body>
+</html>
